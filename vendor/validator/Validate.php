@@ -15,7 +15,6 @@ use vendor\Loader;
 
 class Validate
 {
-
     /**
      * 自定义验证类型
      * @var array
@@ -152,6 +151,12 @@ class Validate
     protected $error = [];
 
     /**
+     * 传入错误信息带入错误码
+     * @var array
+     */
+    protected $errCode = false;
+
+    /**
      * 是否批量验证
      * @var bool
      */
@@ -283,6 +288,18 @@ class Validate
     {
         // 设置当前场景
         $this->currentScene = $name;
+
+        return $this;
+    }
+
+    /**
+     * 设置传入错误信息带入错误码
+     * @param bool $flag
+     * @return $this
+     */
+    public function errcode($flag = true)
+    {
+        $this->errCode = $flag;
 
         return $this;
     }
@@ -715,6 +732,27 @@ class Validate
     }
 
     /**
+     * 字符串命名风格转换
+     * type 0 将Java风格转换为C的风格 1 将C风格转换为Java的风格
+     * @access public
+     * @param  string $name 字符串
+     * @param  integer $type 转换类型
+     * @param  bool $ucfirst 首字母是否大写（驼峰规则）
+     * @return string
+     */
+    public static function parseName($name, $type = 0, $ucfirst = true)
+    {
+        if ($type) {
+            $name = preg_replace_callback('/_([a-zA-Z])/', function ($match) {
+                return strtoupper($match[1]);
+            }, $name);
+            return $ucfirst ? ucfirst($name) : lcfirst($name);
+        }
+
+        return strtolower(trim(preg_replace("/[A-Z]/", "_\\0", $name), "_"));
+    }
+
+    /**
      * 验证字段值是否为有效格式
      * @access public
      * @param  mixed     $value  字段值
@@ -724,7 +762,7 @@ class Validate
      */
     public function is($value, $rule, $data = [])
     {
-        switch (Loader::parseName($rule, 1, false)) {
+        switch (self::parseName($rule, 1, false)) {
             case 'require':
                 // 必须
                 $result = !empty($value) || '0' == $value;
@@ -1362,10 +1400,55 @@ class Validate
         return false;
     }
 
-    // 获取错误信息
+    /**
+     * 获取错误信息
+     * @return array|string
+     */
     public function getError()
     {
+        if (empty($this->batch)) {
+            $this->error = $this->getFormatError($this->error);
+            return $this->error;
+        }
+
+        if (is_array($this->error)) {
+            $error = [];
+            foreach ($this->error as $index => $item) {
+                $error[$index] = $this->getFormatError($item);
+            }
+            return $error;
+        }
+
         return $this->error;
+    }
+
+    /**
+     * 获取错误详细
+     * @param $msg
+     * @return array|string
+     */
+    public function getFormatError($msg)
+    {
+        if ($this->errCode) {
+            $prefix = $this->errCode === true ? '' : $this->errCode;
+            if (is_string($msg)) {
+                $codeArr = explode('-', $msg);
+                if (count($codeArr) > 1) {
+                    $code = $prefix . $codeArr[0];
+                    unset($codeArr[0]);
+                    $msg = implode('-', $codeArr);
+                } else {
+                    $code = $prefix . 10000007001;
+                    $msg = implode('-', $codeArr);
+                }
+                $error = [
+                    'code' => $code,
+                    'msg' => $msg,
+                ];
+                return $error;
+            }
+        }
+        return $msg;
     }
 
     /**
